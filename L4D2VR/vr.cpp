@@ -442,19 +442,18 @@ void VR::GetViewParameters()
     m_EyeToHeadTransformPosRight.z = eyeToHeadRight.m[2][3];
 }
 
-bool VR::PressedDigitalAction(vr::VRActionHandle_t &actionHandle, bool checkIfActionChanged)
+bool VR::CheckDigitalActionChanged(vr::VRActionHandle_t &actionHandle, bool &state)
 {
     vr::InputDigitalActionData_t digitalActionData;
     vr::EVRInputError result = m_Input->GetDigitalActionData(actionHandle, &digitalActionData, sizeof(digitalActionData), vr::k_ulInvalidInputValueHandle);
     
     if (result == vr::VRInputError_None)
     {
-        if (checkIfActionChanged)
-            return digitalActionData.bState && digitalActionData.bChanged;
-        else
-            return digitalActionData.bState;
+        state = digitalActionData.bState;
+        return digitalActionData.bChanged;
     }
 
+    state = false;
     return false;
 }
 
@@ -545,7 +544,8 @@ void VR::ProcessMenuInput()
     {
         vr::VROverlay()->SetOverlayFlag(currentOverlay, vr::VROverlayFlags_MakeOverlaysInteractiveIfVisible, false);
         
-        if (PressedDigitalAction(m_MenuSelect, true))
+        bool state;
+        if (CheckDigitalActionChanged(m_MenuSelect, state) && state)
         {
             INPUT input {};
             input.type = INPUT_KEYBOARD;
@@ -554,7 +554,7 @@ void VR::ProcessMenuInput()
             input.ki.dwFlags = KEYEVENTF_KEYUP;
             SendInput(1, &input, sizeof(INPUT));
         }
-        if (PressedDigitalAction(m_MenuBack, true) || PressedDigitalAction(m_Pause, true))
+        if ((CheckDigitalActionChanged(m_MenuBack, state) && state) || (CheckDigitalActionChanged(m_Pause, state) && state))
         {
             INPUT input {};
             input.type = INPUT_KEYBOARD;
@@ -563,7 +563,7 @@ void VR::ProcessMenuInput()
             input.ki.dwFlags = KEYEVENTF_KEYUP;
             SendInput(1, &input, sizeof(INPUT));
         }
-        if (PressedDigitalAction(m_MenuUp, true))
+        if (CheckDigitalActionChanged(m_MenuUp, state) && state)
         {
             INPUT input {};
             input.type = INPUT_KEYBOARD;
@@ -572,7 +572,7 @@ void VR::ProcessMenuInput()
             input.ki.dwFlags = KEYEVENTF_KEYUP;
             SendInput(1, &input, sizeof(INPUT));
         }
-        if (PressedDigitalAction(m_MenuDown, true))
+        if (CheckDigitalActionChanged(m_MenuDown, state) && state)
         {
             INPUT input {};
             input.type = INPUT_KEYBOARD;
@@ -581,7 +581,7 @@ void VR::ProcessMenuInput()
             input.ki.dwFlags = KEYEVENTF_KEYUP;
             SendInput(1, &input, sizeof(INPUT));
         }
-        if (PressedDigitalAction(m_MenuLeft, true))
+        if (CheckDigitalActionChanged(m_MenuLeft, state) && state)
         {
             INPUT input {};
             input.type = INPUT_KEYBOARD;
@@ -590,7 +590,7 @@ void VR::ProcessMenuInput()
             input.ki.dwFlags = KEYEVENTF_KEYUP;
             SendInput(1, &input, sizeof(INPUT));
         }
-        if (PressedDigitalAction(m_MenuRight, true))
+        if (CheckDigitalActionChanged(m_MenuRight, state) && state)
         {
             INPUT input {};
             input.type = INPUT_KEYBOARD;
@@ -659,105 +659,82 @@ void VR::ProcessInput()
     {
         // Last valid yaw angle, in case we need to revert to it.
         const float lastYaw = m_RotationOffset.y;
-
+        
         const QAngle targetRotation(0, lastYaw, 0);
-
+        
         const auto lerp = [](float a, float b, float f) -> float {
             return a * (1.0 - f) + (b * f);
         };
-
+        
         float lerpedPitch = lerp(m_RotationOffset.x, targetRotation.x, m_CameraUprightRecoverySpeed);
         float lerpedYaw = lerp(m_RotationOffset.y, targetRotation.y, m_CameraUprightRecoverySpeed);
         float lerpedRoll = lerp(m_RotationOffset.z, targetRotation.z, m_CameraUprightRecoverySpeed);
-
+        
         m_RotationOffset = QAngle(lerpedPitch, lerpedYaw, lerpedRoll);
-
+        
         if (abs(m_RotationOffset.x) < 0.0001)
-            m_RotationOffset.x = 0;
+        m_RotationOffset.x = 0;
         if (abs(m_RotationOffset.z) < 0.0001)
-            m_RotationOffset.z = 0;
-
+        m_RotationOffset.z = 0;
+        
         // Just in case any calculation went awry, revert to an upright vector:
         if (std::isnan(m_RotationOffset.x) || std::isnan(m_RotationOffset.y) || std::isnan(m_RotationOffset.z))
         {
             m_RotationOffset = QAngle(0.f, lastYaw, 0.f);
         }
     }
-
-    if (PressedDigitalAction(m_ActionPrimaryAttack))
+    
+    bool state;
+    if (CheckDigitalActionChanged(m_ActionPrimaryAttack, state))
     {
-        m_Game->ClientCmd_Unrestricted("+attack");
-    }
-    else
-    {
-        m_Game->ClientCmd_Unrestricted("-attack");
+        m_Game->ClientCmd_Unrestricted(state ? "+attack" : "-attack");
     }
 
-    if (PressedDigitalAction(m_ActionSecondaryAttack))
+    if (CheckDigitalActionChanged(m_ActionSecondaryAttack, state))
     {
-        m_Game->ClientCmd_Unrestricted("+attack2");
-    }
-    else
-    {
-        m_Game->ClientCmd_Unrestricted("-attack2");
+        m_Game->ClientCmd_Unrestricted(state ? "+attack2" : "-attack2");
     }
 
-    if (PressedDigitalAction(m_ActionJump))
+    if (CheckDigitalActionChanged(m_ActionJump, state))
     {
-        m_Game->ClientCmd_Unrestricted("+jump");
-    }
-    else
-    {
-        m_Game->ClientCmd_Unrestricted("-jump");
+        m_Game->ClientCmd_Unrestricted(state ? "+jump" : "-jump");
     }
 
-    if (PressedDigitalAction(m_ActionCrouch))
+    if (CheckDigitalActionChanged(m_ActionCrouch, state))
     {
-        m_Game->ClientCmd_Unrestricted("+duck");
-    }
-    else
-    {
-        m_Game->ClientCmd_Unrestricted("-duck");
+        m_Game->ClientCmd_Unrestricted(state ? "+duck" : "-duck");
     }
 
-    if (PressedDigitalAction(m_ActionUse))
+    if (CheckDigitalActionChanged(m_ActionUse, state))
     {
-        m_Game->ClientCmd_Unrestricted("+use");
-    }
-    else
-    {
-        m_Game->ClientCmd_Unrestricted("-use");
+        m_Game->ClientCmd_Unrestricted(state ? "+use" : "-use");
     }
 
-    if (PressedDigitalAction(m_ActionReload))
+    if (CheckDigitalActionChanged(m_ActionReload, state))
     {
-        m_Game->ClientCmd_Unrestricted("+reload");
-    }
-    else
-    {
-        m_Game->ClientCmd_Unrestricted("-reload");
+        m_Game->ClientCmd_Unrestricted(state ? "+reload" : "-reload");
     }
 
-    if (PressedDigitalAction(m_ActionPrevItem, true))
+    if (CheckDigitalActionChanged(m_ActionPrevItem, state) && state)
     {
         m_Game->ClientCmd_Unrestricted("invprev");
     }
-    else if (PressedDigitalAction(m_ActionNextItem, true))
+    else if (CheckDigitalActionChanged(m_ActionNextItem, state) && state)
     {
         m_Game->ClientCmd_Unrestricted("invnext");
     }
 
-    if (PressedDigitalAction(m_ActionResetPosition, true))
+    if (CheckDigitalActionChanged(m_ActionResetPosition, state) && state)
     {
         ResetPosition();
     }
 
-    if (PressedDigitalAction(m_ActionFlashlight, true))
+    if (CheckDigitalActionChanged(m_ActionFlashlight, state) && state)
     {
         m_Game->ClientCmd_Unrestricted("impulse 100");
     }
 
-    if (PressedDigitalAction(m_Spray, true))
+    if (CheckDigitalActionChanged(m_Spray, state) && state)
     {
         m_Game->ClientCmd_Unrestricted("impulse 201");
     }
@@ -783,7 +760,7 @@ void VR::ProcessInput()
 
     m_RenderedHud = false;
 
-    if (PressedDigitalAction(m_Pause, true))
+    if (CheckDigitalActionChanged(m_Pause, state) && state)
     {
         m_Game->ClientCmd_Unrestricted("gameui_activate");
         RepositionOverlays();
